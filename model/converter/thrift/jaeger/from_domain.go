@@ -41,6 +41,18 @@ func FromDomainSpan(span *model.Span) *jaeger.Span {
 	return dToJ.transformSpan(span)
 }
 
+// FromDomainProcess takes a single model.Span and
+// converts its Process into a jaeger.Process. If errors are
+// found during conversion of tags, then error tags are appended.
+func FromDomainProcess(mProcess *model.Process) *jaeger.Process {
+	dToJ := &domainToJaegerTransformer{}
+	tags := dToJ.convertKeyValuesToTags(mProcess.Tags)
+	return &jaeger.Process{
+		ServiceName: mProcess.ServiceName,
+		Tags:        tags,
+	}
+}
+
 type domainToJaegerTransformer struct{}
 
 func (d domainToJaegerTransformer) keyValueToTag(kv *model.KeyValue) *jaeger.Tag {

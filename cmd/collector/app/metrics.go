@@ -36,6 +36,8 @@ type SpanProcessorMetrics struct {
 	InQueueLatency metrics.Timer
 	// SpansDropped measures the number of spans we discarded because the queue was full
 	SpansDropped metrics.Counter
+	// SpansFailedToSave measures the number of spans we discarded because they could not be written out
+	SpansFailedToWrite metrics.Counter
 	// BatchSize measures the span batch size
 	BatchSize metrics.Gauge // size of span batch
 	// QueueLength measures the size of the internal span queue

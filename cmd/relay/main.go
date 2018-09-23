@@ -36,6 +36,7 @@ import (
 	"github.com/jaegertracing/jaeger/cmd/collector/app/zipkin"
 	"github.com/jaegertracing/jaeger/cmd/env"
 	"github.com/jaegertracing/jaeger/cmd/flags"
+	"github.com/jaegertracing/jaeger/cmd/relay/app"
 	"github.com/jaegertracing/jaeger/cmd/relay/app/builder"
 	"github.com/jaegertracing/jaeger/cmd/relay/app/sender"
 	"github.com/jaegertracing/jaeger/pkg/config"
@@ -86,6 +87,8 @@ func main() {
 			}
 			metricsFactory := baseFactory.Namespace("relay", nil)
 			receiverOpts := new(builder.ReceiverOptions).InitFromViper(v)
+
+			// build span batch sender from configured options
 			var spanBatchSender collectorApp.SpanProcessor
 			builder.InitSenderTypeFromViper(v)
 			switch builder.ConfiguredSenderType {
@@ -116,14 +119,30 @@ func main() {
 			default:
 				logger.Fatal("Unrecognized sender type configured")
 			}
-			jaegerBatchesHandler := collectorApp.NewJaegerSpanHandler(logger, spanBatchSender)
+
+			// build queued span batch processor with underlying sender
+			hostname, _ := os.Hostname()
+			hostMetrics := metricsFactory.Namespace("", map[string]string{"host": hostname})
+			queueProcessorOpts := new(builder.QueueProcessorOptions).InitFromViper(v)
+			spanBatchProcessor := app.NewSpanBatchProcessor(
+				spanBatchSender,
+				app.Options.Logger(logger),
+				app.Options.ServiceMetrics(metricsFactory),
+				app.Options.HostMetrics(hostMetrics),
+				app.Options.NumWorkers(queueProcessorOpts.NumWorkers),
+				app.Options.QueueSize(queueProcessorOpts.QueueSize),
+				app.Options.RetryOnProcessingFailures(queueProcessorOpts.RetryOnFailure),
+			)
+
+			// construct receiver and configure to send to span batch processor
+			jaegerBatchesHandler := collectorApp.NewJaegerSpanHandler(logger, spanBatchProcessor)
 			zSanitizer := zs.NewChainedSanitizer(
 				zs.NewSpanDurationSanitizer(),
 				zs.NewSpanStartTimeSanitizer(),
 				zs.NewParentIDSanitizer(),
 				zs.NewErrorTagSanitizer(),
 			)
-			zipkinSpansHandler := collectorApp.NewZipkinSpanHandler(logger, spanBatchSender, zSanitizer)
+			zipkinSpansHandler := collectorApp.NewZipkinSpanHandler(logger, spanBatchProcessor, zSanitizer)
 
 			// register (jaeger, zipkin) thrift with tchannel-based server
 			ch, err := tchannel.NewChannel(serviceName, &tchannel.ChannelOptions{})

@@ -87,7 +87,6 @@ func main() {
 			metricsFactory := baseFactory.Namespace("relay", nil)
 			receiverOpts := new(builder.ReceiverOptions).InitFromViper(v)
 			var spanBatchSender collectorApp.SpanProcessor
-			logger.Info("SenderType was initialized", zap.String("senderType", builder.ConfiguredSenderType.String()))
 			builder.InitSenderTypeFromViper(v)
 			switch builder.ConfiguredSenderType {
 			case builder.ThriftTChannelSenderType:

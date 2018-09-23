@@ -71,12 +71,10 @@ func NewSpanThriftHTTPSender(
 func (s *SpanThriftHTTPSender) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
 	s.senderMetrics.BatchesIncoming.Inc(1)
 	s.senderMetrics.SpansIncoming.Inc(int64(len(mSpans)))
-	s.logger.Info("Process spans", zap.Int("Span-count", len(mSpans)))
 	tBatch := &tmodel.Batch{
 		Process: jConv.FromDomainProcess(mSpans[0].Process),
 		Spans:   jConv.FromDomain(mSpans),
 	}
-	s.logger.Info("Process tmodel spans", zap.Int("Span-count", len(tBatch.GetSpans())))
 	body, err := serializeThrift(tBatch)
 	if err != nil {
 		return s.fail(len(mSpans), err)

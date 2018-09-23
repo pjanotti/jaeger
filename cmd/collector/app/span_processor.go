@@ -17,7 +17,6 @@ package app
 import (
 	"time"
 
-	"github.com/uber/tchannel-go"
 	"go.uber.org/zap"
 
 	"github.com/jaegertracing/jaeger/cmd/collector/app/sanitizer"
@@ -101,6 +100,7 @@ func (sp *spanProcessor) saveSpan(span *model.Span) {
 	if err := sp.spanWriter.WriteSpan(span); err != nil {
 		sp.logger.Error("Failed to save span", zap.Error(err))
 		sp.metrics.SavedErrBySvc.ReportServiceNameForSpan(span)
+		sp.metrics.SpansFailedToWrite.Inc(1) // TODO:PCSJ seems redundant with addition above
 	} else {
 		sp.logger.Debug("Span written to the storage by the collector",
 			zap.Stringer("trace-id", span.TraceID), zap.Stringer("span-id", span.SpanID))

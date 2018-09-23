@@ -20,6 +20,10 @@ const (
 	receiverJaegerHTTPPort     = "receiver.jaeger.http-port"
 	receiverZipkinHTTPort      = "receiver.zipkin.http-port"
 
+	queueProcessorNumWorkers     = "queue-processor.num-workers"
+	queueProcessorQueueSize      = "queue-processor.queue-size"
+	queueProcessorRetryOnFailure = "queue-processor.retry-on-failure"
+
 	senderTypeFlag string = "sender.type"
 	// ThriftTChannelSenderType represents a thrift-format tchannel-transport sender
 	ThriftTChannelSenderType SenderType = "thrift-tchannel"
@@ -36,6 +40,11 @@ const (
 	// RelayDefaultHealthCheckHTTPPort is the default HTTP Port for health check
 	RelayDefaultHealthCheckHTTPPort = 14269
 
+	// defaultQueuedProcessorNumWorkers is the default number of workers consuming from the processor queue
+	defaultQueueProcessorNumWorkers = 10
+	// defaultQueueProcessorQueueSize is the default maximum number of span batches allowed in the processor's queue
+	defaultQueueProcessorQueueSize = 1000
+
 	defaultThriftTChannelSenderDiscoveryMinPeers         = 3
 	defaultThriftTChannelSenderDiscoveryConnCheckTimeout = 250 * time.Millisecond
 
@@ -50,6 +59,16 @@ type ReceiverOptions struct {
 	ReceiverJaegerHTTPPort int
 	// ReceiverZipkinHTTPPort is the port that the relay receives on for zipkin http requests
 	ReceiverZipkinHTTPPort int
+}
+
+// QueueProcessorOptions holds configuration for the queued batch processor
+type QueueProcessorOptions struct {
+	// NumWorkers is the number of queue workers that dequeue batches and send them out
+	NumWorkers int
+	// QueueSize is the maximum number of batches allowed in queue at a given time
+	QueueSize int
+	// Retry indicates whether queue processor should retry span batches in case of processing failure
+	RetryOnFailure bool
 }
 
 // ThriftTChannelSenderOptions holds configuration for Thrift Tchannel sender
@@ -85,6 +104,7 @@ func (s *SenderType) Set(value string) error {
 // AddFlags adds flags for ReceiverOptions
 func AddFlags(flags *flag.FlagSet) {
 	addReceiverFlags(flags)
+	addQueueProcessorFlags(flags)
 	flags.Var(&ConfiguredSenderType, senderTypeFlag, "The type of sender to instantiate")
 	addThriftTChannelReporterFlags(flags)
 	addThriftHTTPReporterFlags(flags)
@@ -94,6 +114,21 @@ func addReceiverFlags(flags *flag.FlagSet) {
 	flags.Int(receiverJaegerTChannelPort, 14267, "The tchannel port for the Jaeger receiver service")
 	flags.Int(receiverJaegerHTTPPort, 14268, "The http port for the Jaeger receiver service")
 	flags.Int(receiverZipkinHTTPort, 9411, "The http port for the Zipkin reciver service e.g. 9411")
+}
+
+func addQueueProcessorFlags(flags *flag.FlagSet) {
+	flags.Int(
+		queueProcessorNumWorkers,
+		defaultQueueProcessorNumWorkers,
+		"The number of workers consuming from the processor queue")
+	flags.Int(
+		queueProcessorQueueSize,
+		defaultQueueProcessorQueueSize,
+		"The maximum number of span batches allowed in the processor's queue (batch sizes can vary and depend upon client settings)")
+	flags.Bool(
+		queueProcessorRetryOnFailure,
+		false,
+		"Whether queue processor should retry span batch in case of processing failure")
 }
 
 func addThriftTChannelReporterFlags(flags *flag.FlagSet) {
@@ -128,6 +163,14 @@ func (rOpts *ReceiverOptions) InitFromViper(v *viper.Viper) *ReceiverOptions {
 	rOpts.ReceiverJaegerHTTPPort = v.GetInt(receiverJaegerHTTPPort)
 	rOpts.ReceiverZipkinHTTPPort = v.GetInt(receiverZipkinHTTPort)
 	return rOpts
+}
+
+// InitFromViper initializes QueueProcessorOptions with properties from viper
+func (qOpts *QueueProcessorOptions) InitFromViper(v *viper.Viper) *QueueProcessorOptions {
+	qOpts.NumWorkers = v.GetInt(queueProcessorNumWorkers)
+	qOpts.QueueSize = v.GetInt(queueProcessorQueueSize)
+	qOpts.RetryOnFailure = v.GetBool(queueProcessorRetryOnFailure)
+	return qOpts
 }
 
 // InitSenderTypeFromViper initializes senderType with property from viper

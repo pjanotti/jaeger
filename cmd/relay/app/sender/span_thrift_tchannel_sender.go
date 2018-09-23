@@ -37,12 +37,10 @@ func NewSpanThriftTChannelSender(
 func (s *SpanThriftTChannelSender) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
 	s.senderMetrics.BatchesIncoming.Inc(1)
 	s.senderMetrics.SpansIncoming.Inc(int64(len(mSpans)))
-	s.logger.Info("Process spans", zap.Int("Span-count", len(mSpans)))
 	tBatch := &tmodel.Batch{
 		Process: jConv.FromDomainProcess(mSpans[0].Process),
 		Spans:   jConv.FromDomain(mSpans),
 	}
-	s.logger.Info("Process tmodel spans", zap.Int("Span-count", len(tBatch.GetSpans())))
 	oks := make([]bool, len(mSpans))
 	if err := s.reporter.EmitBatch(tBatch); err != nil {
 		s.logger.Error("Reporter failed to report span batch", zap.Error(err))

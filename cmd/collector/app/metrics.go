@@ -35,6 +35,8 @@ type SpanProcessorMetrics struct { //TODO - initialize metrics in the traditiona
 	InQueueLatency metrics.Timer
 	// SpansDropped measures the number of spans we discarded because the queue was full
 	SpansDropped metrics.Counter
+	// SpansFailedToSave measures the number of spans we discarded because they could not be written out
+	SpansFailedToWrite metrics.Counter
 	// BatchSize measures the span batch size
 	BatchSize metrics.Gauge // size of span batch
 	// QueueLength measures the size of the internal span queue
@@ -80,15 +82,16 @@ func NewSpanProcessorMetrics(serviceMetrics metrics.Factory, hostMetrics metrics
 		spanCounts[otherFormatType] = newCountsBySpanType(serviceMetrics.Namespace("", map[string]string{"format": otherFormatType}))
 	}
 	m := &SpanProcessorMetrics{
-		SaveLatency:    hostMetrics.Timer("save-latency", nil),
-		InQueueLatency: hostMetrics.Timer("in-queue-latency", nil),
-		SpansDropped:   hostMetrics.Counter("spans.dropped", nil),
-		BatchSize:      hostMetrics.Gauge("batch-size", nil),
-		QueueLength:    hostMetrics.Gauge("queue-length", nil),
-		ErrorBusy:      hostMetrics.Counter("error.busy", nil),
-		SavedBySvc:     newMetricsBySvc(serviceMetrics, "saved-by-svc"),
-		spanCounts:     spanCounts,
-		serviceNames:   hostMetrics.Gauge("spans.serviceNames", nil),
+		SaveLatency:        hostMetrics.Timer("save-latency", nil),
+		InQueueLatency:     hostMetrics.Timer("in-queue-latency", nil),
+		SpansDropped:       hostMetrics.Counter("spans.dropped", nil),
+		SpansFailedToWrite: hostMetrics.Counter("spans.failed-write", nil),
+		BatchSize:          hostMetrics.Gauge("batch-size", nil),
+		QueueLength:        hostMetrics.Gauge("queue-length", nil),
+		ErrorBusy:          hostMetrics.Counter("error.busy", nil),
+		SavedBySvc:         newMetricsBySvc(serviceMetrics, "saved-by-svc"),
+		spanCounts:         spanCounts,
+		serviceNames:       hostMetrics.Gauge("spans.serviceNames", nil),
 	}
 
 	return m

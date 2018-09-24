@@ -112,6 +112,7 @@ func main() {
 				thriftHTTPSenderOpts := new(builder.ThriftHTTPSenderOptions).InitFromViper(v)
 				spanBatchSender = sender.NewSpanThriftHTTPSender(
 					thriftHTTPSenderOpts.CollectorEndpoint,
+					thriftHTTPSenderOpts.Headers,
 					metricsFactory,
 					logger,
 					sender.HTTPTimeout(thriftHTTPSenderOpts.HTTPTimeout),

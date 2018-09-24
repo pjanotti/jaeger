@@ -36,6 +36,7 @@ const (
 
 	thriftHTTPSenderCollectorEndpoint = "sender.thrift.http.collector-endpoint"
 	thriftHTTPSenderTimeout           = "sender.thrift.http.timeout"
+	thriftHTTPSenderHeaders           = "sender.thrift.http.headers"
 
 	// RelayDefaultHealthCheckHTTPPort is the default HTTP Port for health check
 	RelayDefaultHealthCheckHTTPPort = 14269
@@ -82,6 +83,7 @@ type ThriftTChannelSenderOptions struct {
 type ThriftHTTPSenderOptions struct {
 	CollectorEndpoint string
 	HTTPTimeout       time.Duration
+	Headers           map[string]string
 }
 
 func (s *SenderType) String() string {
@@ -155,6 +157,10 @@ func addThriftHTTPReporterFlags(flags *flag.FlagSet) {
 		thriftHTTPSenderTimeout,
 		defaultThriftHTTPSenderTimeout,
 		"(with thrift HTTP sender) sets the timeout used for HTTP client")
+	flags.String(
+		thriftHTTPSenderHeaders,
+		"",
+		"(with thrift http sender) comma-separated string representing header-name:header-value key-value pairs to send as headers")
 }
 
 // InitFromViper initializes ReceiverOptions with properties from viper
@@ -192,5 +198,17 @@ func (sOpts *ThriftTChannelSenderOptions) InitFromViper(v *viper.Viper) *ThriftT
 func (sOpts *ThriftHTTPSenderOptions) InitFromViper(v *viper.Viper) *ThriftHTTPSenderOptions {
 	sOpts.CollectorEndpoint = v.GetString(thriftHTTPSenderCollectorEndpoint)
 	sOpts.HTTPTimeout = v.GetDuration(thriftHTTPSenderTimeout)
+	sOpts.Headers = make(map[string]string)
+	if len(v.GetString(thriftHTTPSenderHeaders)) > 0 {
+		headers := strings.Split(v.GetString(thriftHTTPSenderHeaders), ",")
+		for _, header := range headers {
+			// TODO: for now we silently fail if header cannot be parsed
+			// into a key:value pair unambiguously
+			kv := strings.Split(header, ":")
+			if len(kv) == 2 {
+				sOpts.Headers[kv[0]] = kv[1]
+			}
+		}
+	}
 	return sOpts
 }

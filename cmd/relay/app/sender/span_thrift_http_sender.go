@@ -22,6 +22,7 @@ const defaultHTTPTimeout = time.Second * 5
 // SpanThriftHTTPSender forwards spans to a http server.
 type SpanThriftHTTPSender struct {
 	url           string
+	headers       map[string]string
 	client        *http.Client
 	logger        *zap.Logger
 	senderMetrics senderMetrics
@@ -48,6 +49,7 @@ func HTTPRoundTripper(transport http.RoundTripper) HTTPOption {
 //     http://hostname:14268/api/traces?format=jaeger.thrift
 func NewSpanThriftHTTPSender(
 	url string,
+	headers map[string]string,
 	mFactory metrics.Factory,
 	zlogger *zap.Logger,
 	options ...HTTPOption,
@@ -56,6 +58,7 @@ func NewSpanThriftHTTPSender(
 	metrics.Init(&sm, mFactory.Namespace("span-thrift-http-sender", nil), nil)
 	s := &SpanThriftHTTPSender{
 		url:           url,
+		headers:       headers,
 		client:        &http.Client{Timeout: defaultHTTPTimeout},
 		logger:        zlogger,
 		senderMetrics: sm,
@@ -84,6 +87,9 @@ func (s *SpanThriftHTTPSender) ProcessSpans(mSpans []*model.Span, spanFormat str
 		return s.fail(len(mSpans), err)
 	}
 	req.Header.Set("Content-Type", "application/x-thrift")
+	for k, v := range s.headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return s.fail(len(mSpans), err)

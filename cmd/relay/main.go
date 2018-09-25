@@ -125,7 +125,7 @@ func main() {
 			hostname, _ := os.Hostname()
 			hostMetrics := metricsFactory.Namespace("", map[string]string{"host": hostname})
 			queueProcessorOpts := new(builder.QueueProcessorOptions).InitFromViper(v)
-			spanBatchProcessor := app.NewSpanBatchProcessor(
+			queuedSpanBatchProcessor := app.NewQueuedSpanBatchProcessor(
 				spanBatchSender,
 				app.Options.Logger(logger),
 				app.Options.ServiceMetrics(metricsFactory),
@@ -136,14 +136,14 @@ func main() {
 			)
 
 			// construct receiver and configure to send to span batch processor
-			jaegerBatchesHandler := collectorApp.NewJaegerSpanHandler(logger, spanBatchProcessor)
+			jaegerBatchesHandler := collectorApp.NewJaegerSpanHandler(logger, queuedSpanBatchProcessor)
 			zSanitizer := zs.NewChainedSanitizer(
 				zs.NewSpanDurationSanitizer(),
 				zs.NewSpanStartTimeSanitizer(),
 				zs.NewParentIDSanitizer(),
 				zs.NewErrorTagSanitizer(),
 			)
-			zipkinSpansHandler := collectorApp.NewZipkinSpanHandler(logger, spanBatchProcessor, zSanitizer)
+			zipkinSpansHandler := collectorApp.NewZipkinSpanHandler(logger, queuedSpanBatchProcessor, zSanitizer)
 
 			// register (jaeger, zipkin) thrift with tchannel-based server
 			ch, err := tchannel.NewChannel(serviceName, &tchannel.ChannelOptions{})

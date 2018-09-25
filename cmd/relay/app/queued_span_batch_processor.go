@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type spanBatchProcessor struct {
+type queuedSpanBatchProcessor struct {
 	queue                    *queue.BoundedQueue
 	metrics                  *cApp.SpanProcessorMetrics
 	logger                   *zap.Logger
@@ -24,12 +24,12 @@ type queueItem struct {
 	spanFormat string
 }
 
-// NewSpanBatchProcessor returns a NewSpanBatchProcessor that queues and sends out spans
-func NewSpanBatchProcessor(
+// NewQueuedSpanBatchProcessor returns a queuedSpanBatchProcessor that queues and sends out spans
+func NewQueuedSpanBatchProcessor(
 	sender cApp.SpanProcessor,
 	opts ...Option,
 ) cApp.SpanProcessor {
-	sp := newSpanBatchProcessor(sender, opts...)
+	sp := newQueuedSpanBatchProcessor(sender, opts...)
 
 	sp.queue.StartConsumers(sp.numWorkers, func(item interface{}) {
 		value := item.(*queueItem)
@@ -41,10 +41,10 @@ func NewSpanBatchProcessor(
 	return sp
 }
 
-func newSpanBatchProcessor(
+func newQueuedSpanBatchProcessor(
 	sender cApp.SpanProcessor,
 	opts ...Option,
-) *spanBatchProcessor {
+) *queuedSpanBatchProcessor {
 	options := Options.apply(opts...)
 	handlerMetrics := cApp.NewSpanProcessorMetrics(
 		options.serviceMetrics,
@@ -55,7 +55,7 @@ func newSpanBatchProcessor(
 		handlerMetrics.SpansDropped.Inc(int64(len(batchItem.mSpans)))
 	}
 	boundedQueue := queue.NewBoundedQueue(options.queueSize, droppedItemHandler)
-	sp := spanBatchProcessor{
+	sp := queuedSpanBatchProcessor{
 		queue:                    boundedQueue,
 		metrics:                  handlerMetrics,
 		logger:                   options.logger,
@@ -67,11 +67,12 @@ func newSpanBatchProcessor(
 }
 
 // Stop halts the span batch processor and all its go-routines.
-func (sp *spanBatchProcessor) Stop() {
+func (sp *queuedSpanBatchProcessor) Stop() {
 	sp.queue.Stop()
 }
 
-func (sp *spanBatchProcessor) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
+// ProcessSpans implements the SpanProcessor interface
+func (sp *queuedSpanBatchProcessor) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
 	sp.metrics.BatchSize.Update(int64(len(mSpans)))
 	retMe := make([]bool, len(mSpans))
 	ok := sp.enqueueSpanBatch(mSpans, spanFormat)
@@ -81,7 +82,7 @@ func (sp *spanBatchProcessor) ProcessSpans(mSpans []*model.Span, spanFormat stri
 	return retMe, nil
 }
 
-func (sp *spanBatchProcessor) enqueueSpanBatch(mSpans []*model.Span, spanFormat string) bool {
+func (sp *queuedSpanBatchProcessor) enqueueSpanBatch(mSpans []*model.Span, spanFormat string) bool {
 	spanCounts := sp.metrics.GetCountsForFormat(spanFormat)
 	for _, mSpan := range mSpans {
 		spanCounts.ReceivedBySvc.ReportServiceNameForSpan(mSpan)
@@ -100,7 +101,7 @@ func (sp *spanBatchProcessor) enqueueSpanBatch(mSpans []*model.Span, spanFormat 
 	return addedToQueue
 }
 
-func (sp *spanBatchProcessor) processItemFromQueue(item *queueItem) {
+func (sp *queuedSpanBatchProcessor) processItemFromQueue(item *queueItem) {
 	startTime := time.Now()
 	oks, err := sp.sender.ProcessSpans(item.mSpans, item.spanFormat)
 	fail := err != nil

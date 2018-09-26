@@ -26,12 +26,13 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	jMetrics "github.com/uber/jaeger-lib/metrics"
 	tchannel "github.com/uber/tchannel-go"
 	"github.com/uber/tchannel-go/thrift"
 	"go.uber.org/zap"
 
 	tchReporter "github.com/jaegertracing/jaeger/cmd/agent/app/reporter/tchannel"
-	collectorApp "github.com/jaegertracing/jaeger/cmd/collector/app"
+	cApp "github.com/jaegertracing/jaeger/cmd/collector/app"
 	zs "github.com/jaegertracing/jaeger/cmd/collector/app/sanitizer/zipkin"
 	"github.com/jaegertracing/jaeger/cmd/collector/app/zipkin"
 	"github.com/jaegertracing/jaeger/cmd/env"
@@ -49,7 +50,10 @@ import (
 	zc "github.com/jaegertracing/jaeger/thrift-gen/zipkincore"
 )
 
-const serviceName = "jaeger-relay"
+const (
+	serviceName                = "jaeger-relay"
+	defaultHealthCheckHTTPPort = 14269
+)
 
 func main() {
 	var signalsChannel = make(chan os.Signal)
@@ -85,65 +89,36 @@ func main() {
 				logger.Fatal("Cannot create metrics factory.", zap.Error(err))
 				return err
 			}
-			metricsFactory := baseFactory.Namespace("relay", nil)
-			receiverOpts := new(builder.ReceiverOptions).InitFromViper(v)
 
-			// build span batch sender from configured options
-			var spanBatchSender collectorApp.SpanProcessor
-			builder.InitSenderTypeFromViper(v)
-			switch builder.ConfiguredSenderType {
-			case builder.ThriftTChannelSenderType:
-				logger.Info("Initializing thrift-tChannel sender")
-				thriftTChannelSenderOpts := new(builder.ThriftTChannelSenderOptions).InitFromViper(v)
-				tchrepbuilder := &tchReporter.Builder{
-					CollectorHostPorts: thriftTChannelSenderOpts.CollectorHostPorts,
-					DiscoveryMinPeers:  thriftTChannelSenderOpts.DiscoveryMinPeers,
-					ConnCheckTimeout:   thriftTChannelSenderOpts.DiscoveryConnCheckTimeout,
-				}
-				tchreporter, err := tchrepbuilder.CreateReporter(metricsFactory, logger)
-				if err != nil {
-					logger.Fatal("Cannot create tchannel reporter.", zap.Error(err))
-					return err
-				}
-				spanBatchSender = sender.NewSpanThriftTChannelSender(
-					tchreporter, metricsFactory, logger)
-			case builder.ThriftHTTPSenderType:
-				logger.Info("Initializing thrift-HTTP sender")
-				thriftHTTPSenderOpts := new(builder.ThriftHTTPSenderOptions).InitFromViper(v)
-				spanBatchSender = sender.NewSpanThriftHTTPSender(
-					thriftHTTPSenderOpts.CollectorEndpoint,
-					thriftHTTPSenderOpts.Headers,
-					metricsFactory,
+			// construct multi-processor from config options
+			multiProcessorOpts := builder.NewMultiProcessorOptions().InitFromViper(v)
+			processors := make([]cApp.SpanProcessor, 0)
+			for _, popt := range multiProcessorOpts.Processors {
+				proc, err := buildQueuedSpanProcessor(
 					logger,
-					sender.HTTPTimeout(thriftHTTPSenderOpts.HTTPTimeout),
+					baseFactory,
+					popt,
 				)
-			default:
-				logger.Fatal("Unrecognized sender type configured")
+				if err != nil {
+					logger.Fatal("Cannot build processor.", zap.Error(err))
+					return err
+				} else {
+					processors = append(processors, proc)
+				}
 			}
+			multiProcessor := app.NewMultiSpanBatchProcessor(processors...)
 
-			// build queued span batch processor with underlying sender
-			hostname, _ := os.Hostname()
-			hostMetrics := metricsFactory.Namespace("", map[string]string{"host": hostname})
-			queueProcessorOpts := new(builder.QueueProcessorOptions).InitFromViper(v)
-			queuedSpanBatchProcessor := app.NewQueuedSpanBatchProcessor(
-				spanBatchSender,
-				app.Options.Logger(logger),
-				app.Options.ServiceMetrics(metricsFactory),
-				app.Options.HostMetrics(hostMetrics),
-				app.Options.NumWorkers(queueProcessorOpts.NumWorkers),
-				app.Options.QueueSize(queueProcessorOpts.QueueSize),
-				app.Options.RetryOnProcessingFailures(queueProcessorOpts.RetryOnFailure),
-			)
+			receiverOpts := multiProcessorOpts.Receiver
 
-			// construct receiver and configure to send to span batch processor
-			jaegerBatchesHandler := collectorApp.NewJaegerSpanHandler(logger, queuedSpanBatchProcessor)
+			// construct receiver and configure to send to processor
+			jaegerBatchesHandler := cApp.NewJaegerSpanHandler(logger, multiProcessor)
 			zSanitizer := zs.NewChainedSanitizer(
 				zs.NewSpanDurationSanitizer(),
 				zs.NewSpanStartTimeSanitizer(),
 				zs.NewParentIDSanitizer(),
 				zs.NewErrorTagSanitizer(),
 			)
-			zipkinSpansHandler := collectorApp.NewZipkinSpanHandler(logger, queuedSpanBatchProcessor, zSanitizer)
+			zipkinSpansHandler := cApp.NewZipkinSpanHandler(logger, multiProcessor, zSanitizer)
 
 			// register (jaeger, zipkin) thrift with tchannel-based server
 			ch, err := tchannel.NewChannel(serviceName, &tchannel.ChannelOptions{})
@@ -154,7 +129,7 @@ func main() {
 			server.Register(jc.NewTChanCollectorServer(jaegerBatchesHandler))
 			server.Register(zc.NewTChanZipkinCollectorServer(zipkinSpansHandler))
 
-			portStr := ":" + strconv.Itoa(receiverOpts.ReceiverJaegerTChannelPort)
+			portStr := ":" + strconv.Itoa(receiverOpts.JaegerThriftTChannelPort)
 			listener, err := net.Listen("tcp", portStr)
 			if err != nil {
 				logger.Fatal("Unable to start listening on tchannel", zap.Error(err))
@@ -163,19 +138,18 @@ func main() {
 
 			// register (jaeger, zipkin) thrift with http-based server
 			r := mux.NewRouter()
-			apiHandler := collectorApp.NewAPIHandler(jaegerBatchesHandler)
+			apiHandler := cApp.NewAPIHandler(jaegerBatchesHandler)
 			apiHandler.RegisterRoutes(r)
 			if h := mBldr.Handler(); h != nil {
 				logger.Info("Registering metrics handler with HTTP server", zap.String("route", mBldr.HTTPRoute))
 				r.Handle(mBldr.HTTPRoute, h)
 			}
-			httpPortStr := ":" + strconv.Itoa(receiverOpts.ReceiverJaegerHTTPPort)
+			httpPortStr := ":" + strconv.Itoa(receiverOpts.JaegerThriftHTTPPort)
 			recoveryHandler := recoveryhandler.NewRecoveryHandler(logger, true)
 
-			go startZipkinHTTPAPI(logger, receiverOpts.ReceiverZipkinHTTPPort, zipkinSpansHandler, recoveryHandler)
-
-			logger.Info("Starting HTTP server", zap.Int("http-port", receiverOpts.ReceiverJaegerHTTPPort))
-
+			// Go!
+			go startZipkinHTTPAPI(logger, receiverOpts.ZipkinThriftHTTPPort, zipkinSpansHandler, recoveryHandler)
+			logger.Info("Starting HTTP server", zap.Int("http-port", receiverOpts.JaegerThriftHTTPPort))
 			go func() {
 				if err := http.ListenAndServe(httpPortStr, recoveryHandler(r)); err != nil {
 					logger.Fatal("Could not launch service", zap.Error(err))
@@ -195,14 +169,13 @@ func main() {
 	command.AddCommand(version.Command())
 	command.AddCommand(env.Command())
 
-	flags.SetDefaultHealthCheckPort(builder.RelayDefaultHealthCheckHTTPPort)
+	flags.SetDefaultHealthCheckPort(defaultHealthCheckHTTPPort)
 
 	config.AddFlags(
 		v,
 		command,
 		flags.AddConfigFileFlag,
 		flags.AddFlags,
-		builder.AddFlags,
 		metrics.AddFlags,
 	)
 
@@ -212,10 +185,65 @@ func main() {
 	}
 }
 
+func buildQueuedSpanProcessor(
+	logger *zap.Logger,
+	baseFactory jMetrics.Factory,
+	opts *builder.QueueProcessorOptions,
+) (cApp.SpanProcessor, error) {
+	metricsFactory := baseFactory.Namespace("relay-"+opts.Name, nil)
+	hostname, _ := os.Hostname()
+	hostMetrics := metricsFactory.Namespace("", map[string]string{"host": hostname})
+
+	// build span batch sender from configured options
+	var spanBatchSender cApp.SpanProcessor
+	switch opts.SenderType {
+	case builder.ThriftTChannelSenderType:
+		logger.Info("Initializing thrift-tChannel sender")
+		thriftTChannelSenderOpts := opts.SenderConfig.(*builder.ThriftTChannelSenderOptions)
+		tchrepbuilder := &tchReporter.Builder{
+			CollectorHostPorts: thriftTChannelSenderOpts.CollectorHostPorts,
+			DiscoveryMinPeers:  thriftTChannelSenderOpts.DiscoveryMinPeers,
+			ConnCheckTimeout:   thriftTChannelSenderOpts.DiscoveryConnCheckTimeout,
+		}
+		tchreporter, err := tchrepbuilder.CreateReporter(metricsFactory, logger)
+		if err != nil {
+			logger.Fatal("Cannot create tchannel reporter.", zap.Error(err))
+			return nil, err
+		}
+		spanBatchSender = sender.NewSpanThriftTChannelSender(
+			tchreporter, metricsFactory, logger)
+	case builder.ThriftHTTPSenderType:
+		thriftHTTPSenderOpts := opts.SenderConfig.(*builder.ThriftHTTPSenderOptions)
+		logger.Info("Initializing thrift-HTTP sender",
+			zap.String("url", thriftHTTPSenderOpts.CollectorEndpoint))
+		spanBatchSender = sender.NewSpanThriftHTTPSender(
+			thriftHTTPSenderOpts.CollectorEndpoint,
+			thriftHTTPSenderOpts.Headers,
+			metricsFactory,
+			logger,
+			sender.HTTPTimeout(thriftHTTPSenderOpts.Timeout),
+		)
+	default:
+		logger.Fatal("Unrecognized sender type configured")
+	}
+
+	// build queued span batch processor with underlying sender
+	queuedSpanBatchProcessor := app.NewQueuedSpanBatchProcessor(
+		spanBatchSender,
+		app.Options.Logger(logger),
+		app.Options.ServiceMetrics(metricsFactory),
+		app.Options.HostMetrics(hostMetrics),
+		app.Options.NumWorkers(opts.NumWorkers),
+		app.Options.QueueSize(opts.QueueSize),
+		app.Options.RetryOnProcessingFailures(opts.RetryOnFailure),
+	)
+	return queuedSpanBatchProcessor, nil
+}
+
 func startZipkinHTTPAPI(
 	logger *zap.Logger,
 	zipkinPort int,
-	zipkinSpansHandler collectorApp.ZipkinSpansHandler,
+	zipkinSpansHandler cApp.ZipkinSpansHandler,
 	recoveryHandler func(http.Handler) http.Handler,
 ) {
 	if zipkinPort != 0 {

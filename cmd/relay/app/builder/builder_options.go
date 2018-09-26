@@ -79,6 +79,8 @@ type QueuedSpanProcessorOptions struct {
 	QueueSize int `mapstructure:"queue-size"`
 	// Retry indicates whether queue processor should retry span batches in case of processing failure
 	RetryOnFailure bool `mapstructure:"retry-on-failure"`
+	// BackoffDelay is the amount of time a worker waits after a failed send before retrying
+	BackoffDelay time.Duration `mapstructure:"backoff-delay"`
 	// SenderType indicates the type of sender to instantiate
 	SenderType   SenderType `mapstructure:"sender-type"`
 	SenderConfig interface{}
@@ -91,6 +93,7 @@ func NewQueuedSpanProcessorOptions() *QueuedSpanProcessorOptions {
 		QueueSize:      5000,
 		RetryOnFailure: true,
 		SenderType:     InvalidSenderType,
+		BackoffDelay:   5 * time.Second,
 	}
 	return opts
 }

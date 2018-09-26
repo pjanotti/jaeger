@@ -236,6 +236,7 @@ func buildQueuedSpanProcessor(
 		processor.Options.NumWorkers(opts.NumWorkers),
 		processor.Options.QueueSize(opts.QueueSize),
 		processor.Options.RetryOnProcessingFailures(opts.RetryOnFailure),
+		processor.Options.BackoffDelay(opts.BackoffDelay),
 	)
 	return queuedSpanProcessor, nil
 }

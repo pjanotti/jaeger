@@ -1,6 +1,8 @@
 package processor
 
 import (
+	"time"
+
 	"github.com/uber/jaeger-lib/metrics"
 	"go.uber.org/zap"
 )
@@ -18,6 +20,7 @@ type options struct {
 	hostMetrics              metrics.Factory
 	numWorkers               int
 	queueSize                int
+	backoffDelay             time.Duration
 	extraFormatTypes         []string
 	retryOnProcessingFailure bool
 }
@@ -60,6 +63,13 @@ func (options) NumWorkers(numWorkers int) Option {
 func (options) QueueSize(queueSize int) Option {
 	return func(b *options) {
 		b.queueSize = queueSize
+	}
+}
+
+// BackoffDelay creates an Option that initializes the backoff delay
+func (options) BackoffDelay(backoffDelay time.Duration) Option {
+	return func(b *options) {
+		b.backoffDelay = backoffDelay
 	}
 }
 

@@ -18,6 +18,8 @@ type queuedSpanProcessor struct {
 	sender                   cApp.SpanProcessor
 	numWorkers               int
 	retryOnProcessingFailure bool
+	backoffDelay             time.Duration
+	stopCh                   chan struct{}
 }
 
 type queueItem struct {
@@ -70,11 +72,14 @@ func newQueuedSpanProcessor(
 		numWorkers:               options.numWorkers,
 		sender:                   sender,
 		retryOnProcessingFailure: options.retryOnProcessingFailure,
+		backoffDelay:             options.backoffDelay,
+		stopCh:                   make(chan struct{}),
 	}
 }
 
 // Stop halts the span processor and all its go-routines.
 func (sp *queuedSpanProcessor) Stop() {
+	close(sp.stopCh)
 	sp.queue.Stop()
 }
 
@@ -138,6 +143,19 @@ func (sp *queuedSpanProcessor) processItemFromQueue(item *queueItem) {
 				sp.metrics.SpansDropped.Inc(int64(len(item.mSpans)))
 			} else {
 				sp.logger.Error("Failed to process batch, re-enqueued", zap.Int("batch-size", len(oks)))
+			}
+		}
+		// back-off for configured delay, but get interrupted when shutting down
+		if sp.backoffDelay > 0 {
+			sp.logger.Warn("Backing off before next attempt",
+				zap.Duration("backoff-delay", sp.backoffDelay))
+			select {
+			case <-sp.stopCh:
+				sp.logger.Info("Interrupted due to shutdown")
+				break
+			case <-time.After(sp.backoffDelay):
+				sp.logger.Info("Resume processing")
+				break
 			}
 		}
 	} else {

@@ -88,6 +88,10 @@ processors:
     # case of send failure.
     retry-on-failure: true
 
+    # configures the amount of time, after a failure to send out a span batch,
+    # to wait before trying to send the next span batch. default is 5s.
+    backoff-delay: 5s
+
     # type of sender (encoding, transport) to use to send spans to remote target
     sender-type: thrift-http
 

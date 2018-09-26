@@ -10,23 +10,23 @@ import (
 	tmodel "github.com/jaegertracing/jaeger/thrift-gen/jaeger"
 )
 
-// SpanThriftTChannelSender takes jaeger model batches and sends them
-// out on tchannel
-type SpanThriftTChannelSender struct {
+// JaegerThriftTChannelSender takes span batches and sends them
+// out on tchannel in thrift encoding
+type JaegerThriftTChannelSender struct {
 	logger        *zap.Logger
 	reporter      reporter.Reporter
 	senderMetrics senderMetrics
 }
 
-// NewSpanThriftTChannelSender creates new TChannel-based sender.
-func NewSpanThriftTChannelSender(
+// NewJaegerThriftTChannelSender creates new TChannel-based sender.
+func NewJaegerThriftTChannelSender(
 	reporter reporter.Reporter,
 	mFactory metrics.Factory,
 	zlogger *zap.Logger,
-) *SpanThriftTChannelSender {
+) *JaegerThriftTChannelSender {
 	sm := senderMetrics{}
-	metrics.Init(&sm, mFactory.Namespace("span-thrift-tchannel-sender", nil), nil)
-	return &SpanThriftTChannelSender{
+	metrics.Init(&sm, mFactory.Namespace("thrift-tchannel", nil), nil)
+	return &JaegerThriftTChannelSender{
 		logger:        zlogger,
 		reporter:      reporter,
 		senderMetrics: sm,
@@ -34,7 +34,7 @@ func NewSpanThriftTChannelSender(
 }
 
 // ProcessSpans implements SpanProcessor interface
-func (s *SpanThriftTChannelSender) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
+func (s *JaegerThriftTChannelSender) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
 	s.senderMetrics.BatchesIncoming.Inc(1)
 	s.senderMetrics.SpansIncoming.Inc(int64(len(mSpans)))
 	tBatch := &tmodel.Batch{

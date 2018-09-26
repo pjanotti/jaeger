@@ -19,8 +19,9 @@ import (
 // Default timeout for http request in seconds
 const defaultHTTPTimeout = time.Second * 5
 
-// SpanThriftHTTPSender forwards spans to a http server.
-type SpanThriftHTTPSender struct {
+// JaegerThriftHTTPSender forwards spans encoded in the jaeger thrift
+// format to a http server
+type JaegerThriftHTTPSender struct {
 	url           string
 	headers       map[string]string
 	client        *http.Client
@@ -29,34 +30,34 @@ type SpanThriftHTTPSender struct {
 }
 
 // HTTPOption sets a parameter for the HttpCollector
-type HTTPOption func(s *SpanThriftHTTPSender)
+type HTTPOption func(s *JaegerThriftHTTPSender)
 
 // HTTPTimeout sets maximum timeout for http request.
 func HTTPTimeout(duration time.Duration) HTTPOption {
-	return func(s *SpanThriftHTTPSender) { s.client.Timeout = duration }
+	return func(s *JaegerThriftHTTPSender) { s.client.Timeout = duration }
 }
 
 // HTTPRoundTripper configures the underlying Transport on the *http.Client
 // that is used
 func HTTPRoundTripper(transport http.RoundTripper) HTTPOption {
-	return func(s *SpanThriftHTTPSender) {
+	return func(s *JaegerThriftHTTPSender) {
 		s.client.Transport = transport
 	}
 }
 
-// NewSpanThriftHTTPSender returns a new HTTP-backend span sender. url should be an http
+// NewJaegerThriftHTTPSender returns a new HTTP-backend span sender. url should be an http
 // url of the collector to handle POST request, typically something like:
 //     http://hostname:14268/api/traces?format=jaeger.thrift
-func NewSpanThriftHTTPSender(
+func NewJaegerThriftHTTPSender(
 	url string,
 	headers map[string]string,
 	mFactory metrics.Factory,
 	zlogger *zap.Logger,
 	options ...HTTPOption,
-) *SpanThriftHTTPSender {
+) *JaegerThriftHTTPSender {
 	sm := senderMetrics{}
-	metrics.Init(&sm, mFactory.Namespace("span-thrift-http-sender", nil), nil)
-	s := &SpanThriftHTTPSender{
+	metrics.Init(&sm, mFactory.Namespace("thrift-http", nil), nil)
+	s := &JaegerThriftHTTPSender{
 		url:           url,
 		headers:       headers,
 		client:        &http.Client{Timeout: defaultHTTPTimeout},
@@ -71,7 +72,7 @@ func NewSpanThriftHTTPSender(
 }
 
 // ProcessSpans implements SpanProcessor interface
-func (s *SpanThriftHTTPSender) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
+func (s *JaegerThriftHTTPSender) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
 	s.senderMetrics.BatchesIncoming.Inc(1)
 	s.senderMetrics.SpansIncoming.Inc(int64(len(mSpans)))
 	tBatch := &tmodel.Batch{
@@ -117,7 +118,7 @@ func serializeThrift(obj thrift.TStruct) (*bytes.Buffer, error) {
 	return t.Buffer, nil
 }
 
-func (s *SpanThriftHTTPSender) fail(msgsCount int, err error) ([]bool, error) {
+func (s *JaegerThriftHTTPSender) fail(msgsCount int, err error) ([]bool, error) {
 	s.logger.Error("Sender failed with error", zap.Error(err))
 	oks := make([]bool, msgsCount)
 	for i := range oks {

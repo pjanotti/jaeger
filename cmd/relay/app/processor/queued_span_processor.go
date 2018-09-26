@@ -6,12 +6,14 @@ import (
 	cApp "github.com/jaegertracing/jaeger/cmd/collector/app"
 	"github.com/jaegertracing/jaeger/model"
 	"github.com/jaegertracing/jaeger/pkg/queue"
+	"github.com/uber/jaeger-lib/metrics"
 	"go.uber.org/zap"
 )
 
 type queuedSpanProcessor struct {
 	queue                    *queue.BoundedQueue
 	metrics                  *cApp.SpanProcessorMetrics
+	batchMetrics             *processorBatchMetrics
 	logger                   *zap.Logger
 	sender                   cApp.SpanProcessor
 	numWorkers               int
@@ -52,14 +54,18 @@ func newQueuedSpanProcessor(
 		options.serviceMetrics,
 		options.hostMetrics,
 		options.extraFormatTypes)
+	bm := &processorBatchMetrics{}
+	metrics.Init(bm, options.serviceMetrics.Namespace("queued-processor", nil), nil)
 	droppedItemHandler := func(item interface{}) {
 		batchItem := item.(queueItem)
 		handlerMetrics.SpansDropped.Inc(int64(len(batchItem.mSpans)))
+		bm.BatchesDropped.Inc(1)
 	}
 	boundedQueue := queue.NewBoundedQueue(options.queueSize, droppedItemHandler)
 	return &queuedSpanProcessor{
 		queue:                    boundedQueue,
 		metrics:                  handlerMetrics,
+		batchMetrics:             bm,
 		logger:                   options.logger,
 		numWorkers:               options.numWorkers,
 		sender:                   sender,
@@ -74,6 +80,7 @@ func (sp *queuedSpanProcessor) Stop() {
 
 // ProcessSpans implements the SpanProcessor interface
 func (sp *queuedSpanProcessor) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
+	sp.batchMetrics.BatchesIncoming.Inc(1)
 	sp.metrics.BatchSize.Update(int64(len(mSpans)))
 	retMe := make([]bool, len(mSpans))
 	ok := sp.enqueueSpanBatch(mSpans, spanFormat)
@@ -98,6 +105,10 @@ func (sp *queuedSpanProcessor) enqueueSpanBatch(mSpans []*model.Span, spanFormat
 	if !addedToQueue {
 		sp.metrics.ErrorBusy.Inc(int64(len(mSpans)))
 		sp.metrics.SpansDropped.Inc(int64(len(mSpans)))
+		sp.batchMetrics.BatchesFailedToEnqueue.Inc(1)
+		sp.batchMetrics.BatchesDropped.Inc(1)
+	} else {
+		sp.batchMetrics.BatchesEnqueued.Inc(1)
 	}
 	return addedToQueue
 }
@@ -113,6 +124,7 @@ func (sp *queuedSpanProcessor) processItemFromQueue(item *queueItem) {
 	}
 	if fail {
 		sp.metrics.SpansFailedToWrite.Inc(int64(len(item.mSpans)))
+		sp.batchMetrics.BatchesProcessingFailedAttempts.Inc(1)
 		if !sp.retryOnProcessingFailure {
 			// throw away the batch
 			sp.logger.Error("Failed to process batch, discarding", zap.Int("batch-size", len(oks)))
@@ -129,6 +141,7 @@ func (sp *queuedSpanProcessor) processItemFromQueue(item *queueItem) {
 			}
 		}
 	} else {
+		sp.batchMetrics.BatchesProcessingSuccessfulAttempts.Inc(1)
 		for _, mSpan := range item.mSpans {
 			sp.metrics.SavedBySvc.ReportServiceNameForSpan(mSpan)
 			sp.metrics.SaveLatency.Record(time.Since(startTime))

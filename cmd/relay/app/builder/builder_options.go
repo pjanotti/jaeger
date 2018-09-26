@@ -38,39 +38,39 @@ func NewReceiverOptions() *ReceiverOptions {
 	return opts
 }
 
-// ThriftTChannelSenderOptions holds configuration for Thrift Tchannel sender
-type ThriftTChannelSenderOptions struct {
+// JaegerThriftTChannelSenderOptions holds configuration for Jaeger Thrift Tchannel sender
+type JaegerThriftTChannelSenderOptions struct {
 	CollectorHostPorts        []string      `mapstructure:"collector-host-ports"`
 	DiscoveryMinPeers         int           `mapstructure:"discovery-min-peers"`
 	DiscoveryConnCheckTimeout time.Duration `mapstructure:"discovery-conn-check-timeout"`
 }
 
-// NewThriftTChannelSenderOptions returns an instance of ThriftTChannelSenderOptions with default values
-func NewThriftTChannelSenderOptions() *ThriftTChannelSenderOptions {
-	opts := &ThriftTChannelSenderOptions{
+// NewJaegerThriftTChannelSenderOptions returns an instance of JaegerThriftTChannelSenderOptions with default values
+func NewJaegerThriftTChannelSenderOptions() *JaegerThriftTChannelSenderOptions {
+	opts := &JaegerThriftTChannelSenderOptions{
 		DiscoveryMinPeers:         3,
 		DiscoveryConnCheckTimeout: 250 * time.Millisecond,
 	}
 	return opts
 }
 
-// ThriftHTTPSenderOptions holds configuration for Thrift HTTP sender
-type ThriftHTTPSenderOptions struct {
+// JaegerThriftHTTPSenderOptions holds configuration for Jaeger Thrift HTTP sender
+type JaegerThriftHTTPSenderOptions struct {
 	CollectorEndpoint string            `mapstructure:"collector-endpoint"`
 	Timeout           time.Duration     `mapstructure:"timeout"`
 	Headers           map[string]string `mapstructure:"headers"`
 }
 
-// NewThriftHTTPSenderOptions returns an instance of ThriftHTTPSenderOptions with default values
-func NewThriftHTTPSenderOptions() *ThriftHTTPSenderOptions {
-	opts := &ThriftHTTPSenderOptions{
+// NewJaegerThriftHTTPSenderOptions returns an instance of JaegerThriftHTTPSenderOptions with default values
+func NewJaegerThriftHTTPSenderOptions() *JaegerThriftHTTPSenderOptions {
+	opts := &JaegerThriftHTTPSenderOptions{
 		Timeout: 5 * time.Second,
 	}
 	return opts
 }
 
-// QueueProcessorOptions holds configuration for the queued batch processor
-type QueueProcessorOptions struct {
+// QueuedSpanProcessorOptions holds configuration for the queued span processor
+type QueuedSpanProcessorOptions struct {
 	// Name is the friendly name of the processor
 	Name string
 	// NumWorkers is the number of queue workers that dequeue batches and send them out
@@ -84,9 +84,9 @@ type QueueProcessorOptions struct {
 	SenderConfig interface{}
 }
 
-// NewQueueProcessorOptions returns an instance of QueueProcessorOptions with default values
-func NewQueueProcessorOptions() *QueueProcessorOptions {
-	opts := &QueueProcessorOptions{
+// NewQueuedSpanProcessorOptions returns an instance of QueuedSpanProcessorOptions with default values
+func NewQueuedSpanProcessorOptions() *QueuedSpanProcessorOptions {
+	opts := &QueuedSpanProcessorOptions{
 		NumWorkers:     10,
 		QueueSize:      5000,
 		RetryOnFailure: true,
@@ -95,45 +95,45 @@ func NewQueueProcessorOptions() *QueueProcessorOptions {
 	return opts
 }
 
-// InitFromViper initializes QueueProcessorOptions with properties from viper
-func (qOpts *QueueProcessorOptions) InitFromViper(v *viper.Viper) *QueueProcessorOptions {
+// InitFromViper initializes QueuedSpanProcessorOptions with properties from viper
+func (qOpts *QueuedSpanProcessorOptions) InitFromViper(v *viper.Viper) *QueuedSpanProcessorOptions {
 	v.Unmarshal(qOpts)
 	switch qOpts.SenderType {
 	case ThriftTChannelSenderType:
-		ttsopts := NewThriftTChannelSenderOptions()
+		ttsopts := NewJaegerThriftTChannelSenderOptions()
 		v.Sub(string(ThriftTChannelSenderType)).Unmarshal(ttsopts)
 		qOpts.SenderConfig = ttsopts
 	case ThriftHTTPSenderType:
-		thsOpts := NewThriftHTTPSenderOptions()
+		thsOpts := NewJaegerThriftHTTPSenderOptions()
 		v.Sub(string(ThriftHTTPSenderType)).Unmarshal(thsOpts)
 		qOpts.SenderConfig = thsOpts
 	}
 	return qOpts
 }
 
-// MultiProcessorOptions holds configuration for all the span processors
-type MultiProcessorOptions struct {
+// MultiSpanProcessorOptions holds configuration for all the span processors
+type MultiSpanProcessorOptions struct {
 	Receiver   *ReceiverOptions
-	Processors []*QueueProcessorOptions
+	Processors []*QueuedSpanProcessorOptions
 }
 
-// NewMultiProcessorOptions returns an instance of MultiProcessorOptions with default values
-func NewMultiProcessorOptions() *MultiProcessorOptions {
-	opts := &MultiProcessorOptions{
+// NewMultiSpanProcessorOptions returns an instance of MultiSpanProcessorOptions with default values
+func NewMultiSpanProcessorOptions() *MultiSpanProcessorOptions {
+	opts := &MultiSpanProcessorOptions{
 		Receiver:   NewReceiverOptions(),
-		Processors: make([]*QueueProcessorOptions, 0),
+		Processors: make([]*QueuedSpanProcessorOptions, 0),
 	}
 	return opts
 }
 
 // InitFromViper initializes MultiProcessorOptions with properties from viper
-func (mOpts *MultiProcessorOptions) InitFromViper(v *viper.Viper) *MultiProcessorOptions {
+func (mOpts *MultiSpanProcessorOptions) InitFromViper(v *viper.Viper) *MultiSpanProcessorOptions {
 	recvv := v.Sub("receiver")
 	recvv.Unmarshal(mOpts.Receiver)
 	procsv := v.Sub("processors")
 	for procName := range v.GetStringMap("processors") {
 		procv := procsv.Sub(procName)
-		procOpts := NewQueueProcessorOptions()
+		procOpts := NewQueuedSpanProcessorOptions()
 		procOpts.Name = procName
 		procOpts.InitFromViper(procv)
 		mOpts.Processors = append(mOpts.Processors, procOpts)

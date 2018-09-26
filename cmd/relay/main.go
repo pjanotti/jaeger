@@ -37,8 +37,8 @@ import (
 	"github.com/jaegertracing/jaeger/cmd/collector/app/zipkin"
 	"github.com/jaegertracing/jaeger/cmd/env"
 	"github.com/jaegertracing/jaeger/cmd/flags"
-	"github.com/jaegertracing/jaeger/cmd/relay/app"
 	"github.com/jaegertracing/jaeger/cmd/relay/app/builder"
+	"github.com/jaegertracing/jaeger/cmd/relay/app/processor"
 	"github.com/jaegertracing/jaeger/cmd/relay/app/sender"
 	"github.com/jaegertracing/jaeger/pkg/config"
 	"github.com/jaegertracing/jaeger/pkg/healthcheck"
@@ -91,7 +91,7 @@ func main() {
 			}
 
 			// construct multi-processor from config options
-			multiProcessorOpts := builder.NewMultiProcessorOptions().InitFromViper(v)
+			multiProcessorOpts := builder.NewMultiSpanProcessorOptions().InitFromViper(v)
 			processors := make([]cApp.SpanProcessor, 0)
 			for _, popt := range multiProcessorOpts.Processors {
 				proc, err := buildQueuedSpanProcessor(
@@ -106,19 +106,19 @@ func main() {
 					processors = append(processors, proc)
 				}
 			}
-			multiProcessor := app.NewMultiSpanBatchProcessor(processors...)
+			multiSpanProcessor := processor.NewMultiSpanProcessor(processors...)
 
 			receiverOpts := multiProcessorOpts.Receiver
 
 			// construct receiver and configure to send to processor
-			jaegerBatchesHandler := cApp.NewJaegerSpanHandler(logger, multiProcessor)
+			jaegerBatchesHandler := cApp.NewJaegerSpanHandler(logger, multiSpanProcessor)
 			zSanitizer := zs.NewChainedSanitizer(
 				zs.NewSpanDurationSanitizer(),
 				zs.NewSpanStartTimeSanitizer(),
 				zs.NewParentIDSanitizer(),
 				zs.NewErrorTagSanitizer(),
 			)
-			zipkinSpansHandler := cApp.NewZipkinSpanHandler(logger, multiProcessor, zSanitizer)
+			zipkinSpansHandler := cApp.NewZipkinSpanHandler(logger, multiSpanProcessor, zSanitizer)
 
 			// register (jaeger, zipkin) thrift with tchannel-based server
 			ch, err := tchannel.NewChannel(serviceName, &tchannel.ChannelOptions{})
@@ -188,18 +188,18 @@ func main() {
 func buildQueuedSpanProcessor(
 	logger *zap.Logger,
 	baseFactory jMetrics.Factory,
-	opts *builder.QueueProcessorOptions,
+	opts *builder.QueuedSpanProcessorOptions,
 ) (cApp.SpanProcessor, error) {
 	metricsFactory := baseFactory.Namespace("relay-"+opts.Name, nil)
 	hostname, _ := os.Hostname()
 	hostMetrics := metricsFactory.Namespace("", map[string]string{"host": hostname})
 
 	// build span batch sender from configured options
-	var spanBatchSender cApp.SpanProcessor
+	var spanSender cApp.SpanProcessor
 	switch opts.SenderType {
 	case builder.ThriftTChannelSenderType:
 		logger.Info("Initializing thrift-tChannel sender")
-		thriftTChannelSenderOpts := opts.SenderConfig.(*builder.ThriftTChannelSenderOptions)
+		thriftTChannelSenderOpts := opts.SenderConfig.(*builder.JaegerThriftTChannelSenderOptions)
 		tchrepbuilder := &tchReporter.Builder{
 			CollectorHostPorts: thriftTChannelSenderOpts.CollectorHostPorts,
 			DiscoveryMinPeers:  thriftTChannelSenderOpts.DiscoveryMinPeers,
@@ -210,13 +210,13 @@ func buildQueuedSpanProcessor(
 			logger.Fatal("Cannot create tchannel reporter.", zap.Error(err))
 			return nil, err
 		}
-		spanBatchSender = sender.NewSpanThriftTChannelSender(
+		spanSender = sender.NewJaegerThriftTChannelSender(
 			tchreporter, metricsFactory, logger)
 	case builder.ThriftHTTPSenderType:
-		thriftHTTPSenderOpts := opts.SenderConfig.(*builder.ThriftHTTPSenderOptions)
+		thriftHTTPSenderOpts := opts.SenderConfig.(*builder.JaegerThriftHTTPSenderOptions)
 		logger.Info("Initializing thrift-HTTP sender",
 			zap.String("url", thriftHTTPSenderOpts.CollectorEndpoint))
-		spanBatchSender = sender.NewSpanThriftHTTPSender(
+		spanSender = sender.NewJaegerThriftHTTPSender(
 			thriftHTTPSenderOpts.CollectorEndpoint,
 			thriftHTTPSenderOpts.Headers,
 			metricsFactory,
@@ -227,17 +227,17 @@ func buildQueuedSpanProcessor(
 		logger.Fatal("Unrecognized sender type configured")
 	}
 
-	// build queued span batch processor with underlying sender
-	queuedSpanBatchProcessor := app.NewQueuedSpanBatchProcessor(
-		spanBatchSender,
-		app.Options.Logger(logger),
-		app.Options.ServiceMetrics(metricsFactory),
-		app.Options.HostMetrics(hostMetrics),
-		app.Options.NumWorkers(opts.NumWorkers),
-		app.Options.QueueSize(opts.QueueSize),
-		app.Options.RetryOnProcessingFailures(opts.RetryOnFailure),
+	// build queued span processor with underlying sender
+	queuedSpanProcessor := processor.NewQueuedSpanProcessor(
+		spanSender,
+		processor.Options.Logger(logger),
+		processor.Options.ServiceMetrics(metricsFactory),
+		processor.Options.HostMetrics(hostMetrics),
+		processor.Options.NumWorkers(opts.NumWorkers),
+		processor.Options.QueueSize(opts.QueueSize),
+		processor.Options.RetryOnProcessingFailures(opts.RetryOnFailure),
 	)
-	return queuedSpanBatchProcessor, nil
+	return queuedSpanProcessor, nil
 }
 
 func startZipkinHTTPAPI(

@@ -1,4 +1,4 @@
-package app
+package processor
 
 import (
 	"github.com/uber/jaeger-lib/metrics"

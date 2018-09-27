@@ -56,7 +56,11 @@ func NewJaegerThriftHTTPSender(
 	options ...HTTPOption,
 ) *JaegerThriftHTTPSender {
 	sm := senderMetrics{}
-	metrics.Init(&sm, mFactory.Namespace("thrift-http", nil), nil)
+	tags := map[string]string{
+		"type":        "JaegerThriftHTTPSender",
+		"sender_type": "jaeger-thrift-http",
+	}
+	metrics.Init(&sm, mFactory, tags)
 	s := &JaegerThriftHTTPSender{
 		url:           url,
 		headers:       headers,
@@ -73,8 +77,8 @@ func NewJaegerThriftHTTPSender(
 
 // ProcessSpans implements SpanProcessor interface
 func (s *JaegerThriftHTTPSender) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
-	s.senderMetrics.BatchesIncoming.Inc(1)
-	s.senderMetrics.SpansIncoming.Inc(int64(len(mSpans)))
+	s.senderMetrics.BatchesRequestToSend.Inc(1)
+	s.senderMetrics.SpansRequestToSend.Inc(int64(len(mSpans)))
 	tBatch := &tmodel.Batch{
 		Process: jConv.FromDomainProcess(mSpans[0].Process),
 		Spans:   jConv.FromDomain(mSpans),

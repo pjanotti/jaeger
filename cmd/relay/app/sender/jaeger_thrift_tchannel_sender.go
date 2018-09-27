@@ -25,7 +25,11 @@ func NewJaegerThriftTChannelSender(
 	zlogger *zap.Logger,
 ) *JaegerThriftTChannelSender {
 	sm := senderMetrics{}
-	metrics.Init(&sm, mFactory.Namespace("thrift-tchannel", nil), nil)
+	tags := map[string]string{
+		"type":        "JaegerThriftTChannelSender",
+		"sender_type": "jaeger-thrift-tchannel",
+	}
+	metrics.Init(&sm, mFactory, tags)
 	return &JaegerThriftTChannelSender{
 		logger:        zlogger,
 		reporter:      reporter,
@@ -35,8 +39,8 @@ func NewJaegerThriftTChannelSender(
 
 // ProcessSpans implements SpanProcessor interface
 func (s *JaegerThriftTChannelSender) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
-	s.senderMetrics.BatchesIncoming.Inc(1)
-	s.senderMetrics.SpansIncoming.Inc(int64(len(mSpans)))
+	s.senderMetrics.BatchesRequestToSend.Inc(1)
+	s.senderMetrics.SpansRequestToSend.Inc(int64(len(mSpans)))
 	tBatch := &tmodel.Batch{
 		Process: jConv.FromDomainProcess(mSpans[0].Process),
 		Spans:   jConv.FromDomain(mSpans),

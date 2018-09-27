@@ -4,7 +4,7 @@ import "github.com/uber/jaeger-lib/metrics"
 
 type senderMetrics struct {
 	// Number of batches incoming to sender
-	BatchesIncoming metrics.Counter `metric:"batches.incoming"`
+	BatchesRequestToSend metrics.Counter `metric:"batches.requestToSend"`
 
 	// Number of successful batches sent
 	BatchesSent metrics.Counter `metric:"batches.sent"`
@@ -13,7 +13,7 @@ type senderMetrics struct {
 	BatchesFailedToSend metrics.Counter `metric:"batches.failedToSend"`
 
 	// Number of spans in batches incoming
-	SpansIncoming metrics.Counter `metric:"spans.incoming"`
+	SpansRequestToSend metrics.Counter `metric:"spans.requestToSend"`
 
 	// Number of successful spans sent
 	SpansSent metrics.Counter `metric:"spans.sent"`

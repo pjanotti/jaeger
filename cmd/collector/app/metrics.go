@@ -71,6 +71,8 @@ type CountsBySpanType struct {
 	ReceivedBySvc metricsBySvc
 	// RejectedBySvc is the number of spans we rejected (usually due to blacklisting) by-service
 	RejectedBySvc metricsBySvc
+	// DroppedBySvc is the number of spans we dropped (due to full queue) by-service
+	DroppedBySvc metricsBySvc
 }
 
 // NewSpanProcessorMetrics returns a SpanProcessorMetrics
@@ -127,6 +129,7 @@ func newCountsBySpanType(factory metrics.Factory) CountsBySpanType {
 	return CountsBySpanType{
 		RejectedBySvc: newMetricsBySvc(factory, "rejected"),
 		ReceivedBySvc: newMetricsBySvc(factory, "received"),
+		DroppedBySvc:  newMetricsBySvc(factory, "droppedBySvc"),
 	}
 }
 

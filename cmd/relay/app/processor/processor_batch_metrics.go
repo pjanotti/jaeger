@@ -9,12 +9,6 @@ type processorBatchMetrics struct {
 	// Number of batches put into queue
 	BatchesEnqueued metrics.Counter `metric:"batches.enqueued"`
 
-	// Number of batches put into queue
-	BatchesFailedToEnqueue metrics.Counter `metric:"batches.failed.enqueue"`
-
-	// Number of attempts to process batches
-	BatchesProcessingTotalAttempts metrics.Counter `metric:"batches.processing.attempts.total"`
-
 	// Number of successful attempts to process batches
 	BatchesProcessingSuccessfulAttempts metrics.Counter `metric:"batches.processing.attempts.success"`
 

@@ -123,6 +123,17 @@ processors:
       discovery-conn-check-timeout: 250ms
 ```
 
+## Monitoring
+
+The component is instrumented with detailed metrics for each stage of the data
+pipeline. Metrics are exposed in prometheus format at the `/metrics` endpoint
+on the same port as `jaeger-http-port` configured in `receiver` section
+(defaults to `14268` and so default metrics endpoint is
+[http://localhost:14268/metrics](http://localhost:14268/metrics)).
+
+There is a shared Grafana dashboard available [here](https://grafana.com/dashboards/8118)
+to help you get started.
+
 ## Design
 
 The most important concept in the relay's software design is the

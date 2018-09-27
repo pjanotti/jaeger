@@ -26,8 +26,8 @@ func NewJaegerThriftTChannelSender(
 ) *JaegerThriftTChannelSender {
 	sm := senderMetrics{}
 	tags := map[string]string{
-		"type":        "JaegerThriftTChannelSender",
-		"sender_type": "jaeger-thrift-tchannel",
+		"jgr_type":        "JaegerThriftTChannelSender",
+		"jgr_sender_type": "jaeger-thrift-tchannel",
 	}
 	metrics.Init(&sm, mFactory, tags)
 	return &JaegerThriftTChannelSender{

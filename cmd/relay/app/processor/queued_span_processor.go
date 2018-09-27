@@ -52,7 +52,7 @@ func newQueuedSpanProcessor(
 	opts ...Option,
 ) *queuedSpanProcessor {
 	options := Options.apply(opts...)
-	tags := map[string]string{"type": "QueuedSpanProcessor"}
+	tags := map[string]string{"jgr_type": "QueuedSpanProcessor"}
 	sm := options.serviceMetrics.Namespace("", tags)
 	hm := options.hostMetrics.Namespace("", tags)
 	handlerMetrics := cApp.NewSpanProcessorMetrics(

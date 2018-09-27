@@ -191,12 +191,12 @@ func buildQueuedSpanProcessor(
 	opts *builder.QueuedSpanProcessorOptions,
 ) (cApp.SpanProcessor, error) {
 	logger.Info("Constructing queue processor with name", zap.String("name", opts.Name))
+	hostname, _ := os.Hostname()
 	tags := map[string]string{
-		"processor": opts.Name,
+		"jgr_processor": opts.Name,
+		"jgr_host":      hostname,
 	}
 	metricsFactory := baseFactory.Namespace("", tags)
-	hostname, _ := os.Hostname()
-	hostMetrics := metricsFactory.Namespace("", map[string]string{"host": hostname, "processor": opts.Name})
 
 	// build span batch sender from configured options
 	var spanSender cApp.SpanProcessor
@@ -236,7 +236,7 @@ func buildQueuedSpanProcessor(
 		spanSender,
 		processor.Options.Logger(logger),
 		processor.Options.ServiceMetrics(metricsFactory),
-		processor.Options.HostMetrics(hostMetrics),
+		processor.Options.HostMetrics(metricsFactory),
 		processor.Options.Name(opts.Name),
 		processor.Options.NumWorkers(opts.NumWorkers),
 		processor.Options.QueueSize(opts.QueueSize),

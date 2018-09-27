@@ -84,7 +84,7 @@ func main() {
 			}
 
 			mBldr := new(pMetrics.Builder).InitFromViper(v)
-			baseFactory, err := mBldr.CreateMetricsFactory("jaeger")
+			baseFactory, err := mBldr.CreateMetricsFactory("jaeger_relay")
 			if err != nil {
 				logger.Fatal("Cannot create metrics factory.", zap.Error(err))
 				return err
@@ -190,9 +190,13 @@ func buildQueuedSpanProcessor(
 	baseFactory jMetrics.Factory,
 	opts *builder.QueuedSpanProcessorOptions,
 ) (cApp.SpanProcessor, error) {
-	metricsFactory := baseFactory.Namespace("relay-"+opts.Name, nil)
+	logger.Info("Constructing queue processor with name", zap.String("name", opts.Name))
+	tags := map[string]string{
+		"processor": opts.Name,
+	}
+	metricsFactory := baseFactory.Namespace("", tags)
 	hostname, _ := os.Hostname()
-	hostMetrics := metricsFactory.Namespace("", map[string]string{"host": hostname})
+	hostMetrics := metricsFactory.Namespace("", map[string]string{"host": hostname, "processor": opts.Name})
 
 	// build span batch sender from configured options
 	var spanSender cApp.SpanProcessor
@@ -233,6 +237,7 @@ func buildQueuedSpanProcessor(
 		processor.Options.Logger(logger),
 		processor.Options.ServiceMetrics(metricsFactory),
 		processor.Options.HostMetrics(hostMetrics),
+		processor.Options.Name(opts.Name),
 		processor.Options.NumWorkers(opts.NumWorkers),
 		processor.Options.QueueSize(opts.QueueSize),
 		processor.Options.RetryOnProcessingFailures(opts.RetryOnFailure),

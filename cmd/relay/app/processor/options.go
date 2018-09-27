@@ -18,6 +18,7 @@ type options struct {
 	logger                   *zap.Logger
 	serviceMetrics           metrics.Factory
 	hostMetrics              metrics.Factory
+	name                     string
 	numWorkers               int
 	queueSize                int
 	backoffDelay             time.Duration
@@ -49,6 +50,13 @@ func (options) ServiceMetrics(serviceMetrics metrics.Factory) Option {
 func (options) HostMetrics(hostMetrics metrics.Factory) Option {
 	return func(b *options) {
 		b.hostMetrics = hostMetrics
+	}
+}
+
+// Name creates an Option that initializes the name of the processor
+func (options) Name(name string) Option {
+	return func(b *options) {
+		b.name = name
 	}
 }
 

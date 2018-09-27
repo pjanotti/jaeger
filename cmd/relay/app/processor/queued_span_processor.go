@@ -52,18 +52,17 @@ func newQueuedSpanProcessor(
 	opts ...Option,
 ) *queuedSpanProcessor {
 	options := Options.apply(opts...)
+	tags := map[string]string{"type": "QueuedSpanProcessor"}
+	sm := options.serviceMetrics.Namespace("", tags)
+	hm := options.hostMetrics.Namespace("", tags)
 	handlerMetrics := cApp.NewSpanProcessorMetrics(
-		options.serviceMetrics,
-		options.hostMetrics,
+		sm,
+		hm,
 		options.extraFormatTypes)
 	bm := &processorBatchMetrics{}
-	metrics.Init(bm, options.serviceMetrics.Namespace("queued-processor", nil), nil)
-	droppedItemHandler := func(item interface{}) {
-		batchItem := item.(queueItem)
-		handlerMetrics.SpansDropped.Inc(int64(len(batchItem.mSpans)))
-		bm.BatchesDropped.Inc(1)
-	}
-	boundedQueue := queue.NewBoundedQueue(options.queueSize, droppedItemHandler)
+	metrics.Init(bm, sm, nil)
+	// boundedqueue doesn't like a nil dropped handler
+	boundedQueue := queue.NewBoundedQueue(options.queueSize, func(item interface{}) {})
 	return &queuedSpanProcessor{
 		queue:                    boundedQueue,
 		metrics:                  handlerMetrics,
@@ -85,10 +84,8 @@ func (sp *queuedSpanProcessor) Stop() {
 
 // ProcessSpans implements the SpanProcessor interface
 func (sp *queuedSpanProcessor) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
-	sp.batchMetrics.BatchesIncoming.Inc(1)
-	sp.metrics.BatchSize.Update(int64(len(mSpans)))
-	retMe := make([]bool, len(mSpans))
 	ok := sp.enqueueSpanBatch(mSpans, spanFormat)
+	retMe := make([]bool, len(mSpans))
 	for i := range mSpans {
 		retMe[i] = ok
 	}
@@ -96,6 +93,8 @@ func (sp *queuedSpanProcessor) ProcessSpans(mSpans []*model.Span, spanFormat str
 }
 
 func (sp *queuedSpanProcessor) enqueueSpanBatch(mSpans []*model.Span, spanFormat string) bool {
+	sp.batchMetrics.BatchesIncoming.Inc(1)
+	sp.metrics.BatchSize.Update(int64(len(mSpans)))
 	spanCounts := sp.metrics.GetCountsForFormat(spanFormat)
 	for _, mSpan := range mSpans {
 		spanCounts.ReceivedBySvc.ReportServiceNameForSpan(mSpan)
@@ -108,10 +107,7 @@ func (sp *queuedSpanProcessor) enqueueSpanBatch(mSpans []*model.Span, spanFormat
 	}
 	addedToQueue := sp.queue.Produce(item)
 	if !addedToQueue {
-		sp.metrics.ErrorBusy.Inc(int64(len(mSpans)))
-		sp.metrics.SpansDropped.Inc(int64(len(mSpans)))
-		sp.batchMetrics.BatchesFailedToEnqueue.Inc(1)
-		sp.batchMetrics.BatchesDropped.Inc(1)
+		sp.onItemDropped(item)
 	} else {
 		sp.batchMetrics.BatchesEnqueued.Inc(1)
 	}
@@ -133,16 +129,15 @@ func (sp *queuedSpanProcessor) processItemFromQueue(item *queueItem) {
 		if !sp.retryOnProcessingFailure {
 			// throw away the batch
 			sp.logger.Error("Failed to process batch, discarding", zap.Int("batch-size", len(oks)))
-			sp.metrics.SpansDropped.Inc(int64(len(item.mSpans)))
+			sp.onItemDropped(item)
 		} else {
 			// try to put it back at the end of queue for retry at a later time
 			addedToQueue := sp.queue.Produce(item)
 			if !addedToQueue {
 				sp.logger.Error("Failed to process batch and failed to re-enqueue", zap.Int("batch-size", len(oks)))
-				sp.metrics.ErrorBusy.Inc(int64(len(item.mSpans)))
-				sp.metrics.SpansDropped.Inc(int64(len(item.mSpans)))
+				sp.onItemDropped(item)
 			} else {
-				sp.logger.Error("Failed to process batch, re-enqueued", zap.Int("batch-size", len(oks)))
+				sp.logger.Warn("Failed to process batch, re-enqueued", zap.Int("batch-size", len(oks)))
 			}
 		}
 		// back-off for configured delay, but get interrupted when shutting down
@@ -165,5 +160,14 @@ func (sp *queuedSpanProcessor) processItemFromQueue(item *queueItem) {
 			sp.metrics.SaveLatency.Record(time.Since(startTime))
 			sp.metrics.InQueueLatency.Record(time.Since(item.queuedTime))
 		}
+	}
+}
+
+func (sp *queuedSpanProcessor) onItemDropped(item *queueItem) {
+	sp.metrics.SpansDropped.Inc(int64(len(item.mSpans)))
+	sp.batchMetrics.BatchesDropped.Inc(1)
+	spanCounts := sp.metrics.GetCountsForFormat(item.spanFormat)
+	for _, mSpan := range item.mSpans {
+		spanCounts.DroppedBySvc.ReportServiceNameForSpan(mSpan)
 	}
 }

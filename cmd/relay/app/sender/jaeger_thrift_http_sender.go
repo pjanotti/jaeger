@@ -57,8 +57,8 @@ func NewJaegerThriftHTTPSender(
 ) *JaegerThriftHTTPSender {
 	sm := senderMetrics{}
 	tags := map[string]string{
-		"type":        "JaegerThriftHTTPSender",
-		"sender_type": "jaeger-thrift-http",
+		"jgr_type":        "JaegerThriftHTTPSender",
+		"jgr_sender_type": "jaeger-thrift-http",
 	}
 	metrics.Init(&sm, mFactory, tags)
 	s := &JaegerThriftHTTPSender{

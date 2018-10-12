@@ -133,6 +133,10 @@ func main() {
 			listener, err := net.Listen("tcp", portStr)
 			if err != nil {
 				logger.Fatal("Unable to start listening on tchannel", zap.Error(err))
+			} else {
+				logger.Info("Starting to listen on tchannel",
+					zap.String("port", portStr),
+					zap.String("service-name", serviceName))
 			}
 			ch.Serve(listener)
 

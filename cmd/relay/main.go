@@ -51,7 +51,7 @@ import (
 )
 
 const (
-	serviceName                = "jaeger-relay"
+	serviceName                = "jaeger-collector"
 	defaultHealthCheckHTTPPort = 14269
 )
 

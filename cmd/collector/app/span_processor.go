@@ -17,6 +17,7 @@ package app
 import (
 	"time"
 
+	"github.com/uber/tchannel-go"
 	"go.uber.org/zap"
 
 	"github.com/jaegertracing/jaeger/cmd/collector/app/sanitizer"

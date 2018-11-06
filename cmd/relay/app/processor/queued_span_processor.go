@@ -1,13 +1,28 @@
+// Copyright (c) 2018 The Jaeger Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package processor
 
 import (
 	"time"
 
+	"github.com/uber/jaeger-lib/metrics"
+	"go.uber.org/zap"
+
 	cApp "github.com/jaegertracing/jaeger/cmd/collector/app"
 	"github.com/jaegertracing/jaeger/model"
 	"github.com/jaegertracing/jaeger/pkg/queue"
-	"github.com/uber/jaeger-lib/metrics"
-	"go.uber.org/zap"
 )
 
 type queuedSpanProcessor struct {
@@ -156,7 +171,7 @@ func (sp *queuedSpanProcessor) processItemFromQueue(item *queueItem) {
 	} else {
 		sp.batchMetrics.BatchesProcessingSuccessfulAttempts.Inc(1)
 		for _, mSpan := range item.mSpans {
-			sp.metrics.SavedBySvc.ReportServiceNameForSpan(mSpan)
+			sp.metrics.SavedOkBySvc.ReportServiceNameForSpan(mSpan)
 			sp.metrics.SaveLatency.Record(time.Since(startTime))
 			sp.metrics.InQueueLatency.Record(time.Since(item.queuedTime))
 		}

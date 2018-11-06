@@ -102,9 +102,8 @@ func main() {
 				if err != nil {
 					logger.Fatal("Cannot build processor.", zap.Error(err))
 					return err
-				} else {
-					processors = append(processors, proc)
 				}
+				processors = append(processors, proc)
 			}
 			multiSpanProcessor := processor.NewMultiSpanProcessor(processors...)
 

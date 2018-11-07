@@ -204,8 +204,10 @@ func buildQueuedSpanProcessor(
 
 	// build span batch sender from configured options
 	var spanSender cApp.SpanProcessor
+	var nullSender bool
 	switch opts.SenderType {
 	case builder.NullSenderType:
+		nullSender = true
 		logger.Info("Null sender on top of thrift-tChannel sender")
 		fallthrough
 	case builder.ThriftTChannelSenderType:
@@ -218,7 +220,7 @@ func buildQueuedSpanProcessor(
 		}
 		var tchreporter reporter.Reporter
 		var err error
-		if tchreporter != nil {
+		if nullSender {
 			logger.Info("Using null reporter")
 			tchreporter, err = tchrepbuilder.CreateNullReporter(metricsFactory, logger)
 		} else {

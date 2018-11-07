@@ -17,6 +17,7 @@ package tchannel
 import (
 	"time"
 
+	athrift "github.com/apache/thrift/lib/go/thrift"
 	"github.com/uber/jaeger-lib/metrics"
 	"github.com/uber/tchannel-go"
 	"github.com/uber/tchannel-go/thrift"
@@ -49,6 +50,17 @@ type batchMetrics struct {
 	SpansFailures metrics.Counter `metric:"spans.failures"`
 }
 
+type nullClient struct{}
+
+func (c *nullClient) Call(ctx thrift.Context, serviceName, methodName string, req, resp athrift.TStruct) (success bool, err error) {
+	return true, nil
+}
+
+// NewNullClient returns a client that doesn't do anything
+func newNullClient() thrift.TChanClient {
+	return &nullClient{}
+}
+
 // Reporter forwards received spans to central collector tier over TChannel.
 type Reporter struct {
 	channel        *tchannel.Channel
@@ -70,7 +82,7 @@ func New(
 ) *Reporter {
 	var thriftClient thrift.TChanClient
 	if nullClient {
-		thriftClient = thrift.NewNullClient()
+		thriftClient = newNullClient()
 	} else {
 		thriftClient = thrift.NewClient(channel, collectorServiceName, nil)
 	}

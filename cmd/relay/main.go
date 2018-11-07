@@ -40,6 +40,7 @@ import (
 	"github.com/jaegertracing/jaeger/cmd/relay/app/builder"
 	"github.com/jaegertracing/jaeger/cmd/relay/app/processor"
 	"github.com/jaegertracing/jaeger/cmd/relay/app/sender"
+	"github.com/jaegertracing/jaeger/model"
 	"github.com/jaegertracing/jaeger/pkg/config"
 	"github.com/jaegertracing/jaeger/pkg/healthcheck"
 	"github.com/jaegertracing/jaeger/pkg/metrics"
@@ -205,6 +206,9 @@ func buildQueuedSpanProcessor(
 	// build span batch sender from configured options
 	var spanSender cApp.SpanProcessor
 	switch opts.SenderType {
+	case builder.ThriftTChannelNullSenderType:
+		spanSender = &nullProcessor{}
+		fallthrough
 	case builder.ThriftTChannelSenderType:
 		logger.Info("Initializing thrift-tChannel sender")
 		thriftTChannelSenderOpts := opts.SenderConfig.(*builder.JaegerThriftTChannelSenderOptions)
@@ -218,8 +222,10 @@ func buildQueuedSpanProcessor(
 			logger.Fatal("Cannot create tchannel reporter.", zap.Error(err))
 			return nil, err
 		}
-		spanSender = sender.NewJaegerThriftTChannelSender(
-			tchreporter, metricsFactory, logger)
+		if spanSender == nil {
+			spanSender = sender.NewJaegerThriftTChannelSender(
+				tchreporter, metricsFactory, logger)
+		}
 	case builder.ThriftHTTPSenderType:
 		thriftHTTPSenderOpts := opts.SenderConfig.(*builder.JaegerThriftHTTPSenderOptions)
 		logger.Info("Initializing thrift-HTTP sender",
@@ -268,4 +274,14 @@ func startZipkinHTTPAPI(
 			logger.Fatal("Could not launch service", zap.Error(err))
 		}
 	}
+}
+
+type nullProcessor struct{}
+
+func (p *nullProcessor) ProcessSpans(mSpans []*model.Span, spanFormat string) ([]bool, error) {
+	oks := make([]bool, len(mSpans))
+	for i := range mSpans {
+		oks[i] = true
+	}
+	return oks, nil
 }

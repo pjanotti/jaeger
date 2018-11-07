@@ -102,8 +102,18 @@ func (b *Builder) enableDiscovery(channel *tchannel.Channel, logger *zap.Logger)
 	)
 }
 
+// CreateNullReporter creates the null reporter for TChannel-based Reporter
+func (b *Builder) CreateNullReporter(mFactory metrics.Factory, logger *zap.Logger) (*Reporter, error) {
+	return b.createReporter(mFactory, logger, true)
+}
+
 // CreateReporter creates the TChannel-based Reporter
 func (b *Builder) CreateReporter(mFactory metrics.Factory, logger *zap.Logger) (*Reporter, error) {
+	return b.createReporter(mFactory, logger, false)
+}
+
+// CreateReporter creates the TChannel-based Reporter
+func (b *Builder) createReporter(mFactory metrics.Factory, logger *zap.Logger, nullReporter bool) (*Reporter, error) {
 	if b.channel == nil {
 		// ignore errors since it only happens on empty service name
 		b.channel, _ = tchannel.NewChannel(agentServiceName, nil)
@@ -123,7 +133,8 @@ func (b *Builder) CreateReporter(mFactory metrics.Factory, logger *zap.Logger) (
 	if err != nil {
 		return nil, errors.Wrap(err, "cannot enable service discovery")
 	}
-	return New(b.CollectorServiceName, b.channel, peerListMgr, mFactory, logger), nil
+
+	return New(b.CollectorServiceName, b.channel, peerListMgr, mFactory, logger, nullReporter), nil
 }
 
 func defaultInt(value int, defaultVal int) int {

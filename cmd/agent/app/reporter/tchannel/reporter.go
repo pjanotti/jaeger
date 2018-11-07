@@ -66,8 +66,14 @@ func New(
 	peerListMgr *peerlistmgr.PeerListManager,
 	mFactory metrics.Factory,
 	zlogger *zap.Logger,
+	nullClient bool,
 ) *Reporter {
-	thriftClient := thrift.NewClient(channel, collectorServiceName, nil)
+	var thriftClient thrift.TChanClient
+	if nullClient {
+		thriftClient = thrift.NewNullClient()
+	} else {
+		thriftClient = thrift.NewClient(channel, collectorServiceName, nil)
+	}
 	zClient := zipkincore.NewTChanZipkinCollectorClient(thriftClient)
 	jClient := jaeger.NewTChanCollectorClient(thriftClient)
 	batchesMetrics := map[string]batchMetrics{}

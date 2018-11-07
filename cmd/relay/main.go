@@ -31,6 +31,7 @@ import (
 	"github.com/uber/tchannel-go/thrift"
 	"go.uber.org/zap"
 
+	"github.com/jaegertracing/jaeger/cmd/agent/app/reporter"
 	tchReporter "github.com/jaegertracing/jaeger/cmd/agent/app/reporter/tchannel"
 	cApp "github.com/jaegertracing/jaeger/cmd/collector/app"
 	zs "github.com/jaegertracing/jaeger/cmd/collector/app/sanitizer/zipkin"
@@ -102,9 +103,8 @@ func main() {
 				if err != nil {
 					logger.Fatal("Cannot build processor.", zap.Error(err))
 					return err
-				} else {
-					processors = append(processors, proc)
 				}
+				processors = append(processors, proc)
 			}
 			multiSpanProcessor := processor.NewMultiSpanProcessor(processors...)
 
@@ -205,6 +205,9 @@ func buildQueuedSpanProcessor(
 	// build span batch sender from configured options
 	var spanSender cApp.SpanProcessor
 	switch opts.SenderType {
+	case builder.NullSenderType:
+		logger.Info("Null sender on top of thrift-tChannel sender")
+		fallthrough
 	case builder.ThriftTChannelSenderType:
 		logger.Info("Initializing thrift-tChannel sender")
 		thriftTChannelSenderOpts := opts.SenderConfig.(*builder.JaegerThriftTChannelSenderOptions)
@@ -213,7 +216,14 @@ func buildQueuedSpanProcessor(
 			DiscoveryMinPeers:  thriftTChannelSenderOpts.DiscoveryMinPeers,
 			ConnCheckTimeout:   thriftTChannelSenderOpts.DiscoveryConnCheckTimeout,
 		}
-		tchreporter, err := tchrepbuilder.CreateReporter(metricsFactory, logger)
+		var tchreporter reporter.Reporter
+		var err error
+		if tchreporter != nil {
+			logger.Info("Using null reporter")
+			tchreporter, err = tchrepbuilder.CreateNullReporter(metricsFactory, logger)
+		} else {
+			tchreporter, err = tchrepbuilder.CreateReporter(metricsFactory, logger)
+		}
 		if err != nil {
 			logger.Fatal("Cannot create tchannel reporter.", zap.Error(err))
 			return nil, err

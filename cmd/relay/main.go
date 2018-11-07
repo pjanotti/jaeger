@@ -206,7 +206,7 @@ func buildQueuedSpanProcessor(
 	// build span batch sender from configured options
 	var spanSender cApp.SpanProcessor
 	switch opts.SenderType {
-	case builder.ThriftTChannelNullSenderType:
+	case builder.NoopSenderType:
 		spanSender = &nullProcessor{}
 		fallthrough
 	case builder.ThriftTChannelSenderType:

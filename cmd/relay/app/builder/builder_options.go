@@ -12,8 +12,8 @@ type SenderType string
 const (
 	// ThriftTChannelSenderType represents a thrift-format tchannel-transport sender
 	ThriftTChannelSenderType SenderType = "thrift-tchannel"
-	// ThriftTChannelNullSenderType represents a thrift-format tchannel-transport sender
-	ThriftTChannelNullSenderType SenderType = "thrift-tchannel-null"
+	// NoopSenderType represents a thrift-format tchannel-transport that does not do anything with received data.
+	NoopSenderType SenderType = "noop"
 	// ThriftHTTPSenderType represents a thrift-format http-transport sender
 	ThriftHTTPSenderType = "thrift-http"
 	// InvalidSenderType represents an invalid sender

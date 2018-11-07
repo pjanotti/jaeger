@@ -142,3 +142,33 @@ func convertZipkinToModel(zSpan *zipkincore.Span, logger *zap.Logger) []*model.S
 	}
 	return mSpans
 }
+
+// No-op handlers, receive remote spans but drop them immediately.
+
+type noopZipkinSpansHandler struct{}
+
+func (zh *noopZipkinSpansHandler) SubmitZipkinBatch(ctx thrift.Context, spans []*zipkincore.Span) ([]*zipkincore.Response, error) {
+	responses := make([]*zipkincore.Response, len(spans))
+	for i := 0; i < len(spans); i++ {
+		res := zipkincore.NewResponse()
+		res.Ok = true
+		responses[i] = res
+	}
+	return responses, nil
+}
+
+type noopJaegerBatchesHandler struct{}
+
+func (jh *noopJaegerBatchesHandler) SubmitBatches(ctx thrift.Context, batches []*jaeger.Batch) ([]*jaeger.BatchSubmitResponse, error) {
+	responses := make([]*jaeger.BatchSubmitResponse, len(batches))
+	for i := 0; i < len(batches); i++ {
+		responses[i] = &jaeger.BatchSubmitResponse{Ok: true}
+	}
+
+	return responses, nil
+}
+
+// NewNoopHandlers gets the noop handlers (receivers) that just drop data without submitting to processor.
+func NewNoopHandlers() (JaegerBatchesHandler, ZipkinSpansHandler) {
+	return &noopJaegerBatchesHandler{}, &noopZipkinSpansHandler{}
+}

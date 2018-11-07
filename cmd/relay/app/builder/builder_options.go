@@ -20,6 +20,8 @@ const (
 
 // ReceiverOptions holds configuration for receivers
 type ReceiverOptions struct {
+	// UseNoopReceiver indicates if noop receivers should be used
+	UseNoopReceiver bool `mapstructure:"noop-receiver"`
 	// JaegerThriftTChannelPort is the port that the relay receives on for jaeger thrift tchannel requests
 	JaegerThriftTChannelPort int `mapstructure:"jaeger-thrift-tchannel-port"`
 	// ReceiverJaegerHTTPPort is the port that the relay receives on for jaeger thrift http requests

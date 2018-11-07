@@ -111,14 +111,20 @@ func main() {
 			receiverOpts := multiProcessorOpts.Receiver
 
 			// construct receiver and configure to send to processor
-			jaegerBatchesHandler := cApp.NewJaegerSpanHandler(logger, multiSpanProcessor)
-			zSanitizer := zs.NewChainedSanitizer(
-				zs.NewSpanDurationSanitizer(),
-				zs.NewSpanStartTimeSanitizer(),
-				zs.NewParentIDSanitizer(),
-				zs.NewErrorTagSanitizer(),
-			)
-			zipkinSpansHandler := cApp.NewZipkinSpanHandler(logger, multiSpanProcessor, zSanitizer)
+			var jaegerBatchesHandler jc.TChanCollector
+			var zipkinSpansHandler zc.TChanZipkinCollector
+			if multiProcessorOpts.Receiver.UseNoopReceiver {
+				jaegerBatchesHandler, zipkinSpansHandler = cApp.NewNoopHandlers()
+			} else {
+				jaegerBatchesHandler = cApp.NewJaegerSpanHandler(logger, multiSpanProcessor)
+				zSanitizer := zs.NewChainedSanitizer(
+					zs.NewSpanDurationSanitizer(),
+					zs.NewSpanStartTimeSanitizer(),
+					zs.NewParentIDSanitizer(),
+					zs.NewErrorTagSanitizer(),
+				)
+				zipkinSpansHandler = cApp.NewZipkinSpanHandler(logger, multiSpanProcessor, zSanitizer)
+			}
 
 			// register (jaeger, zipkin) thrift with tchannel-based server
 			ch, err := tchannel.NewChannel(serviceName, &tchannel.ChannelOptions{})
